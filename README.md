@@ -17,9 +17,13 @@ Copy `.env.example` to `.env` and update the values before launch.
 - `VITE_ADMIN_PASSCODE`: admin login passcode for the dashboard
 - `VITE_RAZORPAY_KEY_ID`: public Razorpay key
 - `VITE_CASHFREE_APP_ID`: public Cashfree app ID
+- `VITE_SUPABASE_URL`: Supabase project URL
+- `VITE_SUPABASE_ANON_KEY`: Supabase public anon key
 
 ## Notes
 
 - The storefront is ready for local storefront testing.
-- Payment and live backend integrations can be added once credentials are provided.
-- Admin dashboard data is currently stored in localStorage for a mock backend setup.
+- Supabase scaffolding is in `src/supabaseClient.js` and `supabase/schema.sql`.
+- Run `supabase/schema.sql` in the Supabase SQL editor before connecting shared orders.
+- The app currently uses localStorage until Supabase credentials and server-side admin rules are configured.
+- Never expose a Supabase service-role key in frontend environment variables.
