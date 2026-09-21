@@ -240,9 +240,11 @@ function CheckoutPage({ cartItems, onBack, onOrderComplete }) {
   const [promoDiscount, setPromoDiscount] = useState(0)
   const [isProcessing, setIsProcessing] = useState(false)
   const [formError, setFormError] = useState('')
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const subtotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
-  const shippingFee = subtotal >= 1999 ? 0 : 149
+  const shippingFee = 0
   const grandTotal = subtotal - promoDiscount + shippingFee
+  const upiLink = buildUpiLink(grandTotal)
 
   const applyPromo = () => {
     setPromoDiscount(promoCode.trim().toUpperCase() === 'VANTOS10' ? Math.round(subtotal * 0.1) : 0)
@@ -254,12 +256,15 @@ function CheckoutPage({ cartItems, onBack, onOrderComplete }) {
     const form = new FormData(event.currentTarget)
     const phone = String(form.get('phone')).replace(/\D/g, '')
     const pincode = String(form.get('pincode')).trim()
+    const utr = String(form.get('utr') || '').trim()
     const orderPayload = {
       name: form.get('fullName'),
       email: form.get('email'),
       phone,
       address: `${form.get('street')}${form.get('apartment') ? `, ${form.get('apartment')}` : ''}${form.get('landmark') ? `, ${form.get('landmark')}` : ''}, ${form.get('city')}, ${form.get('state')} - ${pincode}`,
       total: grandTotal,
+      payment_method: paymentMethod,
+      utr,
     }
 
     if (!/^[6-9]\d{9}$/.test(phone)) {
@@ -270,13 +275,13 @@ function CheckoutPage({ cartItems, onBack, onOrderComplete }) {
       setFormError('Enter a valid 6-digit pincode.')
       return
     }
-
-    if (paymentMethod === 'upi') {
-      const upiLink = buildUpiLink(grandTotal, `VANTOS-${Math.floor(1000 + Math.random() * 9000)}`)
-      const payWindow = window.open(upiLink, '_blank')
-      if (!payWindow) {
-        window.location.href = upiLink
-      }
+    if (paymentMethod === 'upi' && !isPaymentDialogOpen) {
+      setIsPaymentDialogOpen(true)
+      return
+    }
+    if (paymentMethod === 'upi' && !/^[A-Za-z0-9-]{6,30}$/.test(utr)) {
+      setFormError('Enter the UTR or transaction ID from your UPI payment.')
+      return
     }
 
     setIsProcessing(true)
@@ -325,15 +330,24 @@ function CheckoutPage({ cartItems, onBack, onOrderComplete }) {
               <div className="mt-5 grid gap-3 sm:grid-cols-2">{[['upi', 'UPI / QR Code', 'GPay · PhonePe · Paytm'], ['card', 'Cards & Netbanking', 'Sandbox ready']].map(([value, title, detail]) => <button type="button" key={value} onClick={() => setPaymentMethod(value)} className={`rounded-xl border p-4 text-left transition ${paymentMethod === value ? 'border-amber-300 bg-amber-300/10' : 'border-stone-800 bg-stone-900/50 hover:border-stone-600'}`}><span className="block text-sm font-semibold text-white">{title}</span><span className="mt-1 block text-xs text-stone-500">{detail}</span></button>)}</div>
               <div className="mt-4 rounded-xl border border-stone-800 bg-stone-900/40 p-4 text-sm text-stone-400">
                 {paymentMethod === 'upi' && (
-                  <span>
-                    UPI ID: <span className="font-semibold text-amber-200">{upiPaymentId}</span> · Amount will be sent as <span className="font-semibold text-white">₹{Number(grandTotal).toLocaleString('en-IN')}</span>
-                  </span>
+                  <div className="flex flex-col items-center gap-4 sm:flex-row">
+                    <a href={upiLink} aria-label="Open UPI payment link" className="shrink-0 rounded-lg bg-white p-2">
+                      <img src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(upiLink)}`} alt="UPI payment QR code" className="h-44 w-44" />
+                    </a>
+                    <div>
+                      <p>Scan to pay with GPay, PhonePe, or Paytm.</p>
+                      <p className="mt-2">UPI ID: <span className="font-semibold text-amber-200">{upiPaymentId}</span></p>
+                      <p className="mt-1">Amount: <span className="font-semibold text-white">₹{Number(grandTotal).toLocaleString('en-IN')}</span></p>
+                    </div>
+                  </div>
                 )}
+                {paymentMethod === 'upi' && !isPaymentDialogOpen && <label className="mt-5 block"><span className="field-label">UTR / transaction ID</span><input name="utr" placeholder="Enter UTR after payment" autoComplete="off" className="field-input" /></label>}
                 {paymentMethod === 'card' && 'Sandbox flow: Razorpay or Cashfree can be connected here with a server-generated order.'}
               </div>
             </section>
             {formError && <p role="alert" className="rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-200">{formError}</p>}
-            <button disabled={isProcessing} type="submit" className="w-full rounded-full bg-amber-300 px-6 py-4 text-sm font-bold tracking-[0.16em] text-stone-950 transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60">{isProcessing ? 'PROCESSING SANDBOX PAYMENT...' : 'PAY & PLACE ORDER'}</button>
+            <button disabled={isProcessing} type="submit" className="w-full rounded-full bg-amber-300 px-6 py-4 text-sm font-bold tracking-[0.16em] text-stone-950 transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60">{isProcessing ? 'PROCESSING SANDBOX PAYMENT...' : paymentMethod === 'upi' && !isPaymentDialogOpen ? 'OPEN QR & PAY' : 'PAY & PLACE ORDER'}</button>
+            {isPaymentDialogOpen && paymentMethod === 'upi' && <div role="dialog" aria-modal="true" aria-labelledby="payment-dialog-title" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/80 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-stone-700 bg-[#0B0B0E] p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200">Payment verification</p><h2 id="payment-dialog-title" className="mt-2 text-2xl font-bold text-white">Scan to pay ₹{Number(grandTotal).toLocaleString('en-IN')}</h2></div><button type="button" onClick={() => setIsPaymentDialogOpen(false)} className="text-2xl text-stone-500 hover:text-white" aria-label="Close payment dialog">×</button></div><div className="mt-6 flex justify-center rounded-xl bg-white p-3"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiLink)}`} alt="UPI payment QR code" className="h-56 w-56" /></div><p className="mt-4 text-center text-sm text-stone-400">Pay using GPay, PhonePe, or Paytm, then enter your UTR below.</p><label className="mt-4 block"><span className="field-label">UTR / transaction ID</span><input name="utr" required placeholder="Enter UTR after payment" autoComplete="off" className="field-input" /></label><button disabled={isProcessing} type="submit" className="mt-6 w-full rounded-full bg-amber-300 px-6 py-4 text-sm font-bold tracking-[0.12em] text-stone-950 disabled:opacity-60">{isProcessing ? 'PROCESSING...' : 'I HAVE PAID, PLACE ORDER'}</button></div></div>}
           </form>
           <CheckoutSummary cartItems={cartItems} subtotal={subtotal} promoDiscount={promoDiscount} shippingFee={shippingFee} grandTotal={grandTotal} promoCode={promoCode} setPromoCode={setPromoCode} applyPromo={applyPromo} />
         </div>
@@ -343,15 +357,40 @@ function CheckoutPage({ cartItems, onBack, onOrderComplete }) {
   )
 }
 
-function OrderConfirmation({ order, onBackHome }) {
+function OrderConfirmation({ order, onBackHome, onOrderUpdate }) {
+  const [resubmission, setResubmission] = useState({ utr: '', screenshot: '' })
+  const [resubmissionError, setResubmissionError] = useState('')
+  const [isResubmitting, setIsResubmitting] = useState(false)
+
+  const handleResubmission = (event) => {
+    event.preventDefault()
+    setResubmissionError('')
+    if (!/^[A-Za-z0-9-]{6,30}$/.test(resubmission.utr.trim())) {
+      setResubmissionError('Enter a valid UTR or transaction ID.')
+      return
+    }
+    if (!resubmission.screenshot) {
+      setResubmissionError('Upload your payment screenshot.')
+      return
+    }
+    setIsResubmitting(true)
+    const updatedOrder = { ...order, utr: resubmission.utr.trim(), payment_screenshot: resubmission.screenshot, payment_status: 'Payment under verification' }
+    const orders = JSON.parse(localStorage.getItem('vantos-orders') || '[]').map((savedOrder) => savedOrder.id === order.id ? updatedOrder : savedOrder)
+    saveOrders(orders)
+    onOrderUpdate(updatedOrder)
+    setIsResubmitting(false)
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#0B0B0E] px-4 py-10 text-stone-100">
       <div className="w-full max-w-xl rounded-[2rem] border border-stone-800 bg-stone-900/60 p-7 text-center sm:p-12">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-300 text-2xl text-stone-950">✓</div>
         <p className="mt-6 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200">Thank you for choosing VANTOS</p>
-        <h1 className="mt-3 text-3xl font-bold text-white">Your order is confirmed.</h1>
+        <h1 className="mt-3 text-3xl font-bold text-white">Your order was submitted.</h1>
         <p className="mt-3 text-stone-400">Order ID <span className="font-semibold text-white">{order.id}</span></p>
-        <div className="mt-8 space-y-3 rounded-2xl border border-stone-800 bg-stone-950/60 p-5 text-left text-sm"><p className="text-stone-400">Delivering to <span className="block mt-1 text-white">{order.name}</span><span className="block text-stone-300">{order.address}</span></p><p className="border-t border-stone-800 pt-3 text-stone-400">Estimated arrival <span className="float-right text-white">3-5 business days</span></p><p className="border-t border-stone-800 pt-3 text-stone-400">Order total <span className="float-right font-semibold text-amber-300">{formatPrice(order.total)}</span></p></div>
+        <p className="mt-3 text-sm text-stone-400">{order.payment_status === 'Paid' ? 'Payment approved.' : order.payment_status === 'Rejected' ? 'Payment was rejected. Please submit a new UTR and payment screenshot.' : 'Payment is under verification. We will review your UTR shortly.'}</p>
+        {order.payment_status === 'Rejected' && <form onSubmit={handleResubmission} className="mt-6 rounded-2xl border border-red-400/30 bg-red-400/10 p-5 text-left"><h2 className="text-sm font-semibold text-red-200">Resubmit payment details</h2><label className="mt-4 block"><span className="field-label">New UTR / transaction ID</span><input value={resubmission.utr} onChange={(event) => setResubmission({ ...resubmission, utr: event.target.value })} className="field-input" placeholder="Enter UTR" /></label><label className="mt-4 block"><span className="field-label">Payment screenshot</span><input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => setResubmission({ ...resubmission, screenshot: String(reader.result) }); reader.readAsDataURL(file) }} className="mt-2 block w-full text-sm text-stone-300 file:mr-3 file:rounded-full file:border-0 file:bg-amber-300 file:px-4 file:py-2 file:font-semibold file:text-stone-950" /></label>{resubmissionError && <p role="alert" className="mt-3 text-sm text-red-200">{resubmissionError}</p>}<button type="submit" disabled={isResubmitting} className="mt-5 w-full rounded-full bg-amber-300 px-5 py-3 text-sm font-bold text-stone-950 disabled:opacity-60">{isResubmitting ? 'SUBMITTING...' : 'RESUBMIT FOR REVIEW'}</button></form>}
+        <div className="mt-8 space-y-3 rounded-2xl border border-stone-800 bg-stone-950/60 p-5 text-left text-sm"><p className="text-stone-400">Delivering to <span className="block mt-1 text-white">{order.name}</span><span className="block text-stone-300">{order.address}</span></p><p className="border-t border-stone-800 pt-3 text-stone-400">Estimated arrival <span className="float-right text-white">5-7 business days</span></p><p className="border-t border-stone-800 pt-3 text-stone-400">Order total <span className="float-right font-semibold text-amber-300">{formatPrice(order.total)}</span></p></div>
         <button type="button" onClick={onBackHome} className="mt-8 rounded-full bg-amber-300 px-6 py-3 text-sm font-semibold text-stone-950 transition hover:bg-amber-200">Back to Home</button>
       </div>
       <WhatsAppButton />
@@ -360,7 +399,8 @@ function OrderConfirmation({ order, onBackHome }) {
 }
 
 function App() {
-  const [page, setPage] = useState(() => window.location.pathname === '/admin' || window.location.hash === '#admin' ? 'admin' : window.location.hash === '#checkout' ? 'checkout' : 'home')
+  const isAdminPath = () => window.location.pathname.endsWith('/admin')
+  const [page, setPage] = useState(() => isAdminPath() || window.location.hash === '#admin' ? 'admin' : window.location.hash === '#checkout' ? 'checkout' : 'home')
   const [order, setOrder] = useState(null)
   const [cartItems, setCartItems] = useState(() => {
     try {
@@ -375,13 +415,14 @@ function App() {
   const [quickViewSize, setQuickViewSize] = useState('M')
   const [quickViewQuantity, setQuickViewQuantity] = useState(1)
   const [quickViewImage, setQuickViewImage] = useState('')
+  const [selectedProductSizes, setSelectedProductSizes] = useState({})
 
   useEffect(() => {
     localStorage.setItem('vantos-cart', JSON.stringify(cartItems))
   }, [cartItems])
 
   useEffect(() => {
-    const handleHashChange = () => setPage(window.location.pathname === '/admin' || window.location.hash === '#admin' ? 'admin' : window.location.hash === '#checkout' ? 'checkout' : 'home')
+    const handleHashChange = () => setPage(isAdminPath() || window.location.hash === '#admin' ? 'admin' : window.location.hash === '#checkout' ? 'checkout' : 'home')
     window.addEventListener('hashchange', handleHashChange)
     window.addEventListener('popstate', handleHashChange)
     return () => {
@@ -390,16 +431,24 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    if (page !== 'confirmation' || !order?.id) return undefined
+    const syncOrder = () => {
+      const savedOrder = JSON.parse(localStorage.getItem('vantos-orders') || '[]').find((item) => item.id === order.id)
+      if (savedOrder) setOrder(savedOrder)
+    }
+    window.addEventListener('storage', syncOrder)
+    return () => window.removeEventListener('storage', syncOrder)
+  }, [page, order?.id])
+
   const navigateTo = (nextPage) => {
-    const route = nextPage === 'checkout' ? '#checkout' : nextPage === 'admin' ? '/admin' : '#'
+    const route = nextPage === 'checkout' ? '#checkout' : nextPage === 'admin' ? `${import.meta.env.BASE_URL}admin` : '#'
     window.history.pushState({}, '', route)
     setPage(nextPage)
   }
 
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0)
   const cartSubtotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
-  const shippingThreshold = 15000
-  const shippingRemaining = Math.max(shippingThreshold - cartSubtotal, 0)
   const visibleProducts = activeCategory === 'All' ? productCatalog : productCatalog.filter((product) => product.category === activeCategory)
 
   const addToCart = (product, size = 'M', quantity = 1) => {
@@ -440,11 +489,11 @@ function App() {
   }
 
   const handleOrderComplete = (orderDetails) => {
-    const completedOrder = { ...orderDetails, id: `#VANTOS-${Math.floor(1000 + Math.random() * 9000)}` }
+    const completedOrder = { ...orderDetails, id: `#VANTOS-${Math.floor(1000 + Math.random() * 9000)}`, payment_status: orderDetails.payment_method === 'upi' ? 'Payment under verification' : 'Sandbox paid' }
     saveOrders([{
       ...completedOrder,
       items: cartItems,
-      payment_status: 'Sandbox paid',
+      payment_status: completedOrder.payment_status,
       order_status: 'Pending',
       timestamp: new Date().toISOString(),
     }, ...JSON.parse(localStorage.getItem('vantos-orders') || '[]')])
@@ -458,7 +507,7 @@ function App() {
   }
 
   if (page === 'confirmation' && order) {
-    return <OrderConfirmation order={order} onBackHome={() => navigateTo('home')} />
+    return <OrderConfirmation order={order} onBackHome={() => navigateTo('home')} onOrderUpdate={setOrder} />
   }
 
   if (page === 'admin') {
@@ -469,7 +518,7 @@ function App() {
     <div className="min-h-screen bg-stone-950 text-stone-100">
       <div className="border-b border-stone-800 bg-stone-900/80 text-center text-[11px] font-medium uppercase tracking-[0.22em] text-stone-300">
         <div className="mx-auto flex max-w-7xl items-center justify-center gap-3 px-4 py-2 sm:px-6 lg:px-8">
-          <span>Free shipping over ₹15,000</span>
+          <span>Free shipping during testing</span>
           <span className="hidden text-stone-500 sm:inline">•</span>
           <span>24/7 support</span>
         </div>
@@ -649,9 +698,9 @@ function App() {
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <div className="flex gap-1.5" aria-label={`Available sizes: ${product.sizes.join(', ')}`}>
                       {product.sizes.map((size) => (
-                        <span key={size} className="flex h-7 w-7 items-center justify-center rounded-full border border-stone-700 text-[10px] font-semibold text-stone-400 transition group-hover:border-amber-300/60 group-hover:text-stone-200">
+                        <button type="button" key={size} aria-label={`Select size ${size} for ${product.name}`} aria-pressed={(selectedProductSizes[product.name] || 'M') === size} onClick={() => setSelectedProductSizes((currentSizes) => ({ ...currentSizes, [product.name]: size }))} className={`flex h-7 w-7 items-center justify-center rounded-full border text-[10px] font-semibold transition ${(selectedProductSizes[product.name] || 'M') === size ? 'border-amber-300 bg-amber-300 text-stone-950' : 'border-stone-700 text-stone-400 hover:border-amber-300/60 hover:text-stone-200'}`}>
                           {size}
-                        </span>
+                        </button>
                       ))}
                     </div>
                     <span className="text-xs uppercase tracking-[0.14em] text-stone-500">Sizes</span>
@@ -659,7 +708,7 @@ function App() {
 
                   <button
                     type="button"
-                    onClick={() => addToCart(product, 'M')}
+                    onClick={() => addToCart(product, selectedProductSizes[product.name] || 'M')}
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-stone-100 px-4 py-2.5 text-sm font-semibold text-stone-900 transition hover:bg-amber-300"
                   >
                     <BagIcon />
@@ -840,13 +889,7 @@ function App() {
             </div>
 
             <div className="border-t border-stone-800 px-5 py-5">
-              <div className="mb-5">
-                <div className="mb-2 flex justify-between text-xs text-stone-400">
-                  <span>{shippingRemaining > 0 ? `Add ${formatPrice(shippingRemaining)} more to unlock FREE shipping!` : 'FREE shipping unlocked'}</span>
-                  <span>{Math.min((cartSubtotal / shippingThreshold) * 100, 100).toFixed(0)}%</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-stone-800"><div className="h-full rounded-full bg-amber-300 transition-all duration-300" style={{ width: `${Math.min((cartSubtotal / shippingThreshold) * 100, 100)}%` }} /></div>
-              </div>
+              <p className="mb-5 text-xs text-emerald-300">Free shipping during testing.</p>
               <div className="flex items-center justify-between text-base font-semibold text-white"><span>Subtotal</span><span>{formatPrice(cartSubtotal)}</span></div>
               <p className="mt-2 text-xs text-stone-500">Shipping and taxes calculated at checkout.</p>
               <button type="button" onClick={() => { setIsCartOpen(false); navigateTo('checkout') }} className="mt-5 w-full rounded-full bg-amber-300 px-5 py-3.5 text-xs font-bold tracking-[0.18em] text-stone-950 transition hover:bg-amber-200">PROCEED TO CHECKOUT</button>

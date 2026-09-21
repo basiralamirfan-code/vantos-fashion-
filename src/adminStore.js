@@ -56,7 +56,12 @@ function writeStorage(key, value) {
 
 export function getProducts() {
   const products = readStorage(productStorageKey, null)
-  if (products) return products
+  if (products) {
+    const activeProducts = products.filter((product) => product.id !== 5 && product.id !== 6 && product.name !== 'Test Price Item' && product.name !== 'RS1')
+    const missingSeedProducts = seedAdminProducts.filter((seedProduct) => !activeProducts.some((product) => product.id === seedProduct.id))
+    const migratedProducts = [...activeProducts, ...missingSeedProducts]
+    return migratedProducts.length !== products.length ? writeStorage(productStorageKey, migratedProducts) : products
+  }
   return writeStorage(productStorageKey, seedAdminProducts)
 }
 
@@ -89,6 +94,11 @@ export const adminApi = {
   listOrders: async () => getOrders(),
   updateOrderStatus: async (id, status) => {
     const orders = getOrders().map((order) => order.id === id ? { ...order, order_status: status } : order)
+    saveOrders(orders)
+    return orders.find((order) => order.id === id)
+  },
+  updatePaymentStatus: async (id, paymentStatus) => {
+    const orders = getOrders().map((order) => order.id === id ? { ...order, payment_status: paymentStatus, payment_reviewed_at: new Date().toISOString() } : order)
     saveOrders(orders)
     return orders.find((order) => order.id === id)
   },
