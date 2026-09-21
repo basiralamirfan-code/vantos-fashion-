@@ -442,7 +442,7 @@ function App() {
   }, [page, order?.id])
 
   const navigateTo = (nextPage) => {
-    const route = nextPage === 'checkout' ? '#checkout' : nextPage === 'admin' ? `${import.meta.env.BASE_URL}admin` : '#'
+    const route = nextPage === 'checkout' ? '#checkout' : nextPage === 'admin' ? `${import.meta.env.BASE_URL}#admin` : '#'
     window.history.pushState({}, '', route)
     setPage(nextPage)
   }
