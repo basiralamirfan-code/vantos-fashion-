@@ -194,7 +194,7 @@ function LockIcon() {
   )
 }
 
-function CheckoutSummary({ cartItems, subtotal, promoDiscount, shippingFee, grandTotal, promoCode, setPromoCode, applyPromo }) {
+function CheckoutSummary({ cartItems, subtotal, automaticDiscount, promoDiscount, shippingFee, grandTotal, promoCode, setPromoCode, applyPromo }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false)
 
   return (
@@ -226,6 +226,8 @@ function CheckoutSummary({ cartItems, subtotal, promoDiscount, shippingFee, gran
         </div>
         <div className="mt-6 space-y-3 border-t border-stone-800 pt-5 text-sm">
           <div className="flex justify-between text-stone-400"><span>Subtotal</span><span>{formatPrice(subtotal)}</span></div>
+          {automaticDiscount > 0 && <div className="flex justify-between text-emerald-300"><span>₹6,000 offer (10%)</span><span>-{formatPrice(automaticDiscount)}</span></div>}
+          {promoDiscount > 0 && <div className="flex justify-between text-emerald-300"><span>Promo discount</span><span>-{formatPrice(promoDiscount)}</span></div>}
           <div className="flex justify-between text-stone-400"><span>Shipping</span><span>{shippingFee === 0 ? 'FREE' : formatPrice(shippingFee)}</span></div>
           <div className="flex justify-between border-t border-stone-800 pt-4 text-base font-semibold text-white"><span>Grand Total</span><span className="text-amber-300">{formatPrice(grandTotal)}</span></div>
         </div>
@@ -242,8 +244,9 @@ function CheckoutPage({ cartItems, onBack, onOrderComplete }) {
   const [formError, setFormError] = useState('')
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const subtotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
-  const shippingFee = 0
-  const grandTotal = subtotal - promoDiscount + shippingFee
+  const automaticDiscount = subtotal >= 6000 ? Math.round(subtotal * 0.1) : 0
+  const shippingFee = subtotal >= 2000 ? 0 : 149
+  const grandTotal = subtotal - automaticDiscount - promoDiscount + shippingFee
   const upiLink = buildUpiLink(grandTotal)
 
   const applyPromo = () => {
@@ -349,7 +352,7 @@ function CheckoutPage({ cartItems, onBack, onOrderComplete }) {
             <button disabled={isProcessing} type="submit" className="w-full rounded-full bg-amber-300 px-6 py-4 text-sm font-bold tracking-[0.16em] text-stone-950 transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60">{isProcessing ? 'PROCESSING SANDBOX PAYMENT...' : paymentMethod === 'upi' && !isPaymentDialogOpen ? 'OPEN QR & PAY' : 'PAY & PLACE ORDER'}</button>
             {isPaymentDialogOpen && paymentMethod === 'upi' && <div role="dialog" aria-modal="true" aria-labelledby="payment-dialog-title" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/80 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-stone-700 bg-[#0B0B0E] p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200">Payment verification</p><h2 id="payment-dialog-title" className="mt-2 text-2xl font-bold text-white">Scan to pay ₹{Number(grandTotal).toLocaleString('en-IN')}</h2></div><button type="button" onClick={() => setIsPaymentDialogOpen(false)} className="text-2xl text-stone-500 hover:text-white" aria-label="Close payment dialog">×</button></div><div className="mt-6 flex justify-center rounded-xl bg-white p-3"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiLink)}`} alt="UPI payment QR code" className="h-56 w-56" /></div><p className="mt-4 text-center text-sm text-stone-400">Pay using GPay, PhonePe, or Paytm, then enter your UTR below.</p><label className="mt-4 block"><span className="field-label">UTR / transaction ID</span><input name="utr" required placeholder="Enter UTR after payment" autoComplete="off" className="field-input" /></label><button disabled={isProcessing} type="submit" className="mt-6 w-full rounded-full bg-amber-300 px-6 py-4 text-sm font-bold tracking-[0.12em] text-stone-950 disabled:opacity-60">{isProcessing ? 'PROCESSING...' : 'I HAVE PAID, PLACE ORDER'}</button></div></div>}
           </form>
-          <CheckoutSummary cartItems={cartItems} subtotal={subtotal} promoDiscount={promoDiscount} shippingFee={shippingFee} grandTotal={grandTotal} promoCode={promoCode} setPromoCode={setPromoCode} applyPromo={applyPromo} />
+          <CheckoutSummary cartItems={cartItems} subtotal={subtotal} automaticDiscount={automaticDiscount} promoDiscount={promoDiscount} shippingFee={shippingFee} grandTotal={grandTotal} promoCode={promoCode} setPromoCode={setPromoCode} applyPromo={applyPromo} />
         </div>
       </main>
       <WhatsAppButton />
@@ -449,6 +452,8 @@ function App() {
 
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0)
   const cartSubtotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
+  const shippingThreshold = 2000
+  const shippingRemaining = Math.max(shippingThreshold - cartSubtotal, 0)
   const visibleProducts = activeCategory === 'All' ? productCatalog : productCatalog.filter((product) => product.category === activeCategory)
 
   const addToCart = (product, size = 'M', quantity = 1) => {
@@ -518,7 +523,7 @@ function App() {
     <div className="min-h-screen bg-stone-950 text-stone-100">
       <div className="border-b border-stone-800 bg-stone-900/80 text-center text-[11px] font-medium uppercase tracking-[0.22em] text-stone-300">
         <div className="mx-auto flex max-w-7xl items-center justify-center gap-3 px-4 py-2 sm:px-6 lg:px-8">
-          <span>Free shipping during testing</span>
+          <span>Free shipping over ₹2,000</span>
           <span className="hidden text-stone-500 sm:inline">•</span>
           <span>24/7 support</span>
         </div>
@@ -889,7 +894,7 @@ function App() {
             </div>
 
             <div className="border-t border-stone-800 px-5 py-5">
-              <p className="mb-5 text-xs text-emerald-300">Free shipping during testing.</p>
+              <p className="mb-5 text-xs text-emerald-300">{shippingRemaining > 0 ? `Add ${formatPrice(shippingRemaining)} more for FREE shipping.` : 'FREE shipping unlocked.'}</p>
               <div className="flex items-center justify-between text-base font-semibold text-white"><span>Subtotal</span><span>{formatPrice(cartSubtotal)}</span></div>
               <p className="mt-2 text-xs text-stone-500">Shipping and taxes calculated at checkout.</p>
               <button type="button" onClick={() => { setIsCartOpen(false); navigateTo('checkout') }} className="mt-5 w-full rounded-full bg-amber-300 px-5 py-3.5 text-xs font-bold tracking-[0.18em] text-stone-950 transition hover:bg-amber-200">PROCEED TO CHECKOUT</button>
