@@ -19,11 +19,12 @@ Copy `.env.example` to `.env` and update the values before launch.
 - `VITE_CASHFREE_APP_ID`: public Cashfree app ID
 - `VITE_SUPABASE_URL`: Supabase project URL
 - `VITE_SUPABASE_ANON_KEY`: Supabase public anon key
+- `VITE_ADMIN_EMAIL`: the only email allowed to enter the admin dashboard (`aminkick119@gmail.com`)
 
 ## Notes
 
 - The storefront is ready for local storefront testing.
 - Supabase scaffolding is in `src/supabaseClient.js` and `supabase/schema.sql`.
 - Run `supabase/schema.sql` in the Supabase SQL editor before connecting shared orders.
-- The app currently uses localStorage until Supabase credentials and server-side admin rules are configured.
+- When Supabase credentials are configured, admin access uses a one-time Gmail magic link instead of the local passcode.
 - Never expose a Supabase service-role key in frontend environment variables.

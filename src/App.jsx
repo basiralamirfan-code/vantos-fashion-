@@ -405,11 +405,11 @@ function App() {
   const hasAdminAccess = () => {
     const [hashPath, queryString = ''] = window.location.hash.slice(1).split('?')
     const accessKey = new URLSearchParams(queryString).get('key')
+    const isEmailCallback = new URLSearchParams(window.location.search).get('admin') === '1'
     if (accessKey === siteConfig.adminAccessKey) {
-      localStorage.setItem('vantos-admin-device', 'trusted')
       return true
     }
-    return localStorage.getItem('vantos-admin-device') === 'trusted' && hashPath === 'admin'
+    return (hashPath === 'admin' || isEmailCallback) && (accessKey === siteConfig.adminAccessKey || isEmailCallback)
   }
   const isAdminRoute = () => hasAdminAccess()
   const [page, setPage] = useState(() => isAdminRoute() ? 'admin' : window.location.hash === '#checkout' ? 'checkout' : 'home')

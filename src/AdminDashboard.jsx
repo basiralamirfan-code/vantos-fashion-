@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from './adminStore'
 import { siteConfig } from './siteConfig'
+import { isSupabaseConfigured, supabase } from './supabaseClient'
 import WhatsAppButton from './WhatsAppButton'
 
 const formatPrice = (value) => `₹${Number(value).toLocaleString('en-IN')}`
@@ -75,9 +76,11 @@ function AdminIcon({ name }) {
 }
 
 function AdminDashboard({ onBackHome }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem('vantos-admin-session') === 'active' || localStorage.getItem('vantos-admin-device') === 'trusted')
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !isSupabaseConfigured && sessionStorage.getItem('vantos-admin-session') === 'active')
+  const [isCheckingAuth, setIsCheckingAuth] = useState(isSupabaseConfigured)
   const [passcode, setPasscode] = useState('')
   const [showPasscode, setShowPasscode] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
   const [authError, setAuthError] = useState('')
   const [activeView, setActiveView] = useState('overview')
   const [products, setProducts] = useState([])
@@ -86,6 +89,30 @@ function AdminDashboard({ onBackHome }) {
   const [productForm, setProductForm] = useState(emptyProduct)
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [toast, setToast] = useState('')
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined
+
+    let mounted = true
+    supabase.auth.getSession().then(({ data }) => {
+      const email = data.session?.user?.email?.toLowerCase()
+      if (mounted) {
+        setIsAuthenticated(email === siteConfig.adminEmail.toLowerCase())
+        setIsCheckingAuth(false)
+      }
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const email = session?.user?.email?.toLowerCase()
+      setIsAuthenticated(email === siteConfig.adminEmail.toLowerCase())
+      setIsCheckingAuth(false)
+    })
+
+    return () => {
+      mounted = false
+      listener.subscription.unsubscribe()
+    }
+  }, [])
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -110,9 +137,22 @@ function AdminDashboard({ onBackHome }) {
       return
     }
     sessionStorage.setItem('vantos-admin-session', 'active')
-    localStorage.setItem('vantos-admin-device', 'trusted')
     setIsAuthenticated(true)
     setAuthError('')
+  }
+
+  const sendVerificationLink = async (event) => {
+    event.preventDefault()
+    setAuthError('')
+    const { error } = await supabase.auth.signInWithOtp({
+      email: siteConfig.adminEmail,
+      options: { emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}?admin=1` },
+    })
+    if (error) {
+      setAuthError(error.message)
+      return
+    }
+    setEmailSent(true)
   }
 
   const openProductModal = (product = null) => {
@@ -158,6 +198,10 @@ function AdminDashboard({ onBackHome }) {
     showToast(paymentStatus === 'Paid' ? 'Payment approved' : 'Payment rejected')
   }
 
+  if (isCheckingAuth) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#0B0B0E] px-4 text-sm text-stone-400">Checking admin access...</div>
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0B0B0E] px-4 text-stone-100">
@@ -165,11 +209,16 @@ function AdminDashboard({ onBackHome }) {
           <div className="flex h-11 w-11 items-center justify-center rounded-full bg-stone-100 text-sm font-black text-stone-950">V</div>
           <p className="mt-8 text-xs font-semibold uppercase tracking-[0.28em] text-amber-200">VANTOS / Admin</p>
           <h1 className="mt-3 text-3xl font-bold text-white">Private workspace</h1>
-          <p className="mt-3 text-sm leading-6 text-stone-400">Enter your admin passcode to manage products and orders.</p>
+          <p className="mt-3 text-sm leading-6 text-stone-400">{isSupabaseConfigured ? 'Verify your admin Gmail to continue.' : 'Enter your admin passcode to manage products and orders.'}</p>
+          {isSupabaseConfigured ? <>
+            {emailSent ? <p className="mt-7 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-200">Verification link sent to {siteConfig.adminEmail}. Check your inbox.</p> : <form onSubmit={sendVerificationLink} className="mt-7"><button type="submit" className="w-full rounded-full bg-amber-300 px-5 py-3 text-sm font-bold text-stone-950 transition hover:bg-amber-200">Send Gmail verification</button></form>}
+          </> : <>
           <label className="mt-7 block text-xs font-semibold uppercase tracking-[0.16em] text-stone-400" htmlFor="admin-passcode">Admin passcode</label>
           <div className="relative mt-2"><input id="admin-passcode" type={showPasscode ? 'text' : 'password'} value={passcode} onChange={(event) => setPasscode(event.target.value)} className="w-full rounded-xl border border-stone-700 bg-stone-950 px-4 py-3 pr-20 text-white outline-none focus:border-amber-300" /><button type="button" onClick={() => setShowPasscode((visible) => !visible)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-stone-400 transition hover:text-amber-200" aria-label={showPasscode ? 'Hide admin passcode' : 'Show admin passcode'}>{showPasscode ? 'Hide' : 'Show'}</button></div>
           {authError && <p role="alert" className="mt-3 text-sm text-red-300">{authError}</p>}
           <button type="submit" className="mt-6 w-full rounded-full bg-amber-300 px-5 py-3 text-sm font-bold text-stone-950 transition hover:bg-amber-200">Enter dashboard</button>
+          </>}
+          {authError && isSupabaseConfigured && <p role="alert" className="mt-3 text-sm text-red-300">{authError}</p>}
           <button type="button" onClick={onBackHome} className="mt-4 w-full text-sm text-stone-500 transition hover:text-white">Back to storefront</button>
           <WhatsAppButton />
         </form>
@@ -189,7 +238,7 @@ function AdminDashboard({ onBackHome }) {
       <header className="border-b border-stone-800 bg-[#0B0B0E]">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between px-4 py-4 sm:px-6">
           <button type="button" onClick={onBackHome} className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 text-sm font-black text-stone-950">V</span><span className="text-sm font-semibold tracking-[0.28em] text-stone-200">VANTOS <span className="text-stone-500">/ ADMIN</span></span></button>
-          <button type="button" onClick={() => { sessionStorage.removeItem('vantos-admin-session'); localStorage.removeItem('vantos-admin-device'); setIsAuthenticated(false) }} className="rounded-full border border-stone-700 px-4 py-2 text-xs text-stone-300 transition hover:border-amber-300 hover:text-amber-200">Sign out</button>
+          <button type="button" onClick={async () => { sessionStorage.removeItem('vantos-admin-session'); if (isSupabaseConfigured) await supabase.auth.signOut(); setIsAuthenticated(false) }} className="rounded-full border border-stone-700 px-4 py-2 text-xs text-stone-300 transition hover:border-amber-300 hover:text-amber-200">Sign out</button>
         </div>
       </header>
       <div className="mx-auto flex max-w-[1500px] flex-col md:flex-row">
