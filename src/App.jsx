@@ -402,8 +402,17 @@ function OrderConfirmation({ order, onBackHome, onOrderUpdate }) {
 }
 
 function App() {
-  const isAdminPath = () => window.location.pathname.endsWith('/admin')
-  const [page, setPage] = useState(() => isAdminPath() || window.location.hash === '#admin' ? 'admin' : window.location.hash === '#checkout' ? 'checkout' : 'home')
+  const hasAdminAccess = () => {
+    const [hashPath, queryString = ''] = window.location.hash.slice(1).split('?')
+    const accessKey = new URLSearchParams(queryString).get('key')
+    if (accessKey === siteConfig.adminAccessKey) {
+      localStorage.setItem('vantos-admin-device', 'trusted')
+      return true
+    }
+    return localStorage.getItem('vantos-admin-device') === 'trusted' && hashPath === 'admin'
+  }
+  const isAdminRoute = () => hasAdminAccess()
+  const [page, setPage] = useState(() => isAdminRoute() ? 'admin' : window.location.hash === '#checkout' ? 'checkout' : 'home')
   const [order, setOrder] = useState(null)
   const [cartItems, setCartItems] = useState(() => {
     try {
@@ -425,7 +434,7 @@ function App() {
   }, [cartItems])
 
   useEffect(() => {
-    const handleHashChange = () => setPage(isAdminPath() || window.location.hash === '#admin' ? 'admin' : window.location.hash === '#checkout' ? 'checkout' : 'home')
+    const handleHashChange = () => setPage(isAdminRoute() ? 'admin' : window.location.hash === '#checkout' ? 'checkout' : 'home')
     window.addEventListener('hashchange', handleHashChange)
     window.addEventListener('popstate', handleHashChange)
     return () => {
@@ -445,7 +454,7 @@ function App() {
   }, [page, order?.id])
 
   const navigateTo = (nextPage) => {
-    const route = nextPage === 'checkout' ? '#checkout' : nextPage === 'admin' ? `${import.meta.env.BASE_URL}#admin` : '#'
+    const route = nextPage === 'checkout' ? '#checkout' : nextPage === 'admin' ? `${import.meta.env.BASE_URL}#admin?key=${encodeURIComponent(siteConfig.adminAccessKey)}` : '#'
     window.history.pushState({}, '', route)
     setPage(nextPage)
   }

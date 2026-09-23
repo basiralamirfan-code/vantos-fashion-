@@ -75,7 +75,7 @@ function AdminIcon({ name }) {
 }
 
 function AdminDashboard({ onBackHome }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem('vantos-admin-session') === 'active')
+  const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem('vantos-admin-session') === 'active' || localStorage.getItem('vantos-admin-device') === 'trusted')
   const [passcode, setPasscode] = useState('')
   const [showPasscode, setShowPasscode] = useState(false)
   const [authError, setAuthError] = useState('')
@@ -110,6 +110,7 @@ function AdminDashboard({ onBackHome }) {
       return
     }
     sessionStorage.setItem('vantos-admin-session', 'active')
+    localStorage.setItem('vantos-admin-device', 'trusted')
     setIsAuthenticated(true)
     setAuthError('')
   }
@@ -188,7 +189,7 @@ function AdminDashboard({ onBackHome }) {
       <header className="border-b border-stone-800 bg-[#0B0B0E]">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between px-4 py-4 sm:px-6">
           <button type="button" onClick={onBackHome} className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 text-sm font-black text-stone-950">V</span><span className="text-sm font-semibold tracking-[0.28em] text-stone-200">VANTOS <span className="text-stone-500">/ ADMIN</span></span></button>
-          <button type="button" onClick={() => { sessionStorage.removeItem('vantos-admin-session'); setIsAuthenticated(false) }} className="rounded-full border border-stone-700 px-4 py-2 text-xs text-stone-300 transition hover:border-amber-300 hover:text-amber-200">Sign out</button>
+          <button type="button" onClick={() => { sessionStorage.removeItem('vantos-admin-session'); localStorage.removeItem('vantos-admin-device'); setIsAuthenticated(false) }} className="rounded-full border border-stone-700 px-4 py-2 text-xs text-stone-300 transition hover:border-amber-300 hover:text-amber-200">Sign out</button>
         </div>
       </header>
       <div className="mx-auto flex max-w-[1500px] flex-col md:flex-row">
